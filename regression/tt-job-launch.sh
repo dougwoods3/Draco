@@ -83,7 +83,7 @@ export REGRESSION_PHASE=t
 echo "Test from the login node..."
 echo " "
 logfile=${logdir}/${machine_name_short}-${subproj}-${build_type}${epdash}${extra_params}${prdash}${featurebranch}-${REGRESSION_PHASE}.log
-cmd="$MSUB -o ${logfile} -J ${subproj:0:5}-${featurebranch} ${partition_options} ${rscriptdir}/tt-regress.msub"
+cmd="$MSUB -o ${logfile} -J ${subproj:0:5}-${featurebranch} --exclusive ${partition_options} ${rscriptdir}/tt-regress.msub"
 echo "${cmd}"
 jobid=`eval ${cmd}`
 # delete blank lines
