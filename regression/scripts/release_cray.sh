@@ -27,7 +27,7 @@
 
 # Draco install directory name (/usr/projects/draco/draco-NN_NN_NN)
 export package=draco
-ddir=draco-6_21_0
+ddir=draco-6_22_0
 pdir=$ddir
 
 # environment (use draco modules)
@@ -98,14 +98,14 @@ export TARGET=knl
 ##---------------------------------------------------------------------------##
 sdir=`dirname $0`
 cdir=`pwd`
-export script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd $sdir
+export script_dir=`pwd`
 export draco_script_dir=$script_dir
+cd $cdir
+source $draco_script_dir/common.sh
 
 # CMake options that will be included in the configuration step
 export CONFIG_BASE="-DDRACO_VERSION_PATCH=`echo $ddir | sed -e 's/.*_//'`"
-
-cd $cdir
-source $script_dir/common.sh
 
 # sets umask 0002
 # sets $install_group, $install_permissions, $build_permissions
@@ -121,9 +121,9 @@ ppn=`lookupppn`
 #   be passed to the subshell (bash bug)
 # =============================================================================
 
-OPTIMIZE_ON="-DCMAKE_BUILD_TYPE=Release -DDRACO_LIBRARY_TYPE=SHARED"
-OPTIMIZE_OFF="-DCMAKE_BUILD_TYPE=Debug  -DDRACO_LIBRARY_TYPE=SHARED"
-OPTIMIZE_RWDI="-DCMAKE_BUILD_TYPE=RELWITHDEBINFO -DDRACO_LIBRARY_TYPE=SHARED -DDRACO_DBC_LEVEL=15"
+OPTIMIZE_ON="-DCMAKE_BUILD_TYPE=Release -DDRACO_LIBRARY_TYPE=STATIC"
+OPTIMIZE_OFF="-DCMAKE_BUILD_TYPE=Debug  -DDRACO_LIBRARY_TYPE=STATIC"
+OPTIMIZE_RWDI="-DCMAKE_BUILD_TYPE=RELWITHDEBINFO -DDRACO_LIBRARY_TYPE=STATIC -DDRACO_DBC_LEVEL=15"
 
 LOGGING_ON="-DDRACO_DIAGNOSTICS=7 -DDRACO_TIMING=1"
 LOGGING_OFF="-DDRACO_DIAGNOSTICS=0 -DDRACO_TIMING=0"
@@ -179,6 +179,15 @@ for env in $environments; do
   export build_prefix="$scratchdir/$USER/$pdir/$buildflavor"
   export draco_prefix="/usr/projects/draco/$ddir/$buildflavor"
 
+  unset partition
+  unset knlext
+  case $TARGET in
+    knl)
+      partition="-p knl"
+      knlext="-knl"
+      ;;
+  esac
+
   for (( i=0 ; i < ${#VERSIONS[@]} ; ++i )); do
 
     export version=${VERSIONS[$i]}
@@ -189,15 +198,16 @@ for env in $environments; do
     # export dry_run=1
     # config and build on front-end
     echo -e "\nConfigure and build $package for $buildflavor-$version."
+    echo
     export steps="config build"
-    run "$draco_script_dir/release_cray.msub &> $source_prefix/logs/release-$buildflavor-$version-cb.log"
+    logfile="$source_prefix/logs/release-$buildflavor-$version-cb${knlext}.log"
+    run "$draco_script_dir/release_cray.msub &> $logfile"
 
     # Run the tests on the back-end.
     export steps="test"
-    cmd="msub -V -l walltime=08:00:00 \
--l nodes=2:${TARGET}:ppn=${ppn} -j oe \
--o $source_prefix/logs/release-$buildflavor-$version-t.log \
-$draco_script_dir/release_cray.msub"
+    logfile="$source_prefix/logs/release-$buildflavor-$version-t${knlext}.log"
+    cmd="sbatch -J release_draco -t 8:00:00 -N 1 $partition \
+-o $logfile $draco_script_dir/release_cray.msub"
     echo -e "\nTest $package for $buildflavor-$version."
     echo "$cmd"
     jobid=`eval ${cmd}`

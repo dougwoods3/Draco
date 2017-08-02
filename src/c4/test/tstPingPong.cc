@@ -8,8 +8,6 @@
  *         All rights reserved.
  */
 //---------------------------------------------------------------------------//
-// $Id$
-//---------------------------------------------------------------------------//
 
 #include "c4/ParallelUnitTest.hh"
 #include "ds++/Release.hh"
@@ -19,6 +17,7 @@
 using namespace std;
 
 using rtt_c4::C4_Req;
+using rtt_c4::C4_Status;
 using rtt_c4::C4_Traits;
 using rtt_c4::send;
 using rtt_c4::receive;
@@ -37,6 +36,7 @@ void blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
   if (rtt_c4::nodes() != 2)
     return;
 
+  bool b = false;
   char c = 0;
   int i = 0;
   long l = 0;
@@ -45,6 +45,7 @@ void blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
 
   // assign on node 0
   if (rtt_c4::node() == 0) {
+    b = true;
     c = 'A';
     i = 1;
     l = 1000;
@@ -53,6 +54,7 @@ void blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
 
     // send out data
     // Test both active and depricated forms of the send command.
+    send(&b, 1, 1);
     send(&c, 1, 1);
     send(&i, 1, 1);
     send(&l, 1, 1);
@@ -61,6 +63,7 @@ void blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
 
     // receive back
     // Test both active and depricated forms of the receive command.
+    receive(&b, 1, 1);
     receive(&c, 1, 1);
     receive(&i, 1, 1);
     receive(&l, 1, 1);
@@ -68,6 +71,8 @@ void blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
     receive(&d, 1, 1);
 
     // check values
+    if (b != false)
+      ITFAILS;
     if (c != 'B')
       ITFAILS;
     if (i != 2)
@@ -83,6 +88,7 @@ void blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
   // receive and send on node 1
   if (rtt_c4::node() == 1) {
     // receive from node 0
+    receive(&b, 1, 0);
     receive(&c, 1, 0);
     receive(&i, 1, 0);
     receive(&l, 1, 0);
@@ -90,6 +96,8 @@ void blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
     receive(&d, 1, 0);
 
     // check values
+    if (b != true)
+      ITFAILS;
     if (c != 'A')
       ITFAILS;
     if (i != 1)
@@ -102,6 +110,7 @@ void blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
       ITFAILS;
 
     // assign new values
+    b = false;
     c = 'B';
     i = 2;
     l = 2000;
@@ -109,6 +118,7 @@ void blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
     d = 3.5;
 
     // send them back
+    send(&b, 1, 0);
     send(&c, 1, 0);
     send(&i, 1, 0);
     send(&l, 1, 0);
@@ -134,13 +144,14 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
 
   if (rtt_c4::nodes() != 2)
     return;
-
+  bool b = false;
   char c = 0;
   int i = 0;
   long l = 0;
   float f = 0;
   double d = 0;
 
+  bool br = false;
   char cr = 0;
   int ir = 0;
   long lr = 0;
@@ -148,10 +159,10 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
   double dr = 0;
 
   // send requests
-  C4_Req crs, irs, lrs, frs, drs;
+  C4_Req brs, crs, irs, lrs, frs, drs;
 
   // receive requests
-  C4_Req crr, irr, lrr, frr, drr;
+  C4_Req brr, crr, irr, lrr, frr, drr;
 
   // assign on node 0
   if (rtt_c4::node() == 0) {
@@ -159,6 +170,7 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
     // Test two forms of the receive_async command plus one deprecated
     // form (namespace C4::)
 
+    brr = receive_async(&br, 1, 1);
     receive_async(crr, &cr, 1, 1);
     irr = receive_async(&ir, 1, 1);
     receive_async(lrr, &lr, 1, 1);
@@ -166,6 +178,7 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
     receive_async(drr, &dr, 1, 1);
 
     // give values to the send data
+    b = true;
     c = 'A';
     i = 1;
     l = 1000;
@@ -175,6 +188,7 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
     // send out data
     // Test two forms of the send_async command plus one deprecated
     // form (namespace C4::)
+    brs = send_async(&b, 1, 1);
     send_async(crs, &c, 1, 1);
     irs = send_async(&i, 1, 1);
     send_async(lrs, &l, 1, 1);
@@ -182,6 +196,7 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
     send_async(drs, &d, 1, 1);
 
     // wait for sends to be finished
+    brs.wait();
     crs.wait();
     irs.wait();
     lrs.wait();
@@ -189,13 +204,48 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
     drs.wait();
 
     // wait on receives and check
-    crr.wait();
-    irr.wait();
-    lrr.wait();
-    frr.wait();
-    drr.wait();
+
+    C4_Status status;
+
+    brr.wait(&status);
+    if (status.get_message_size() != sizeof(bool))
+      ITFAILS;
+    if (status.get_source() != 1)
+      ITFAILS;
+
+    crr.wait(&status);
+    if (status.get_message_size() != 1)
+      ITFAILS;
+    if (status.get_source() != 1)
+      ITFAILS;
+
+    irr.wait(&status);
+    if (status.get_message_size() != sizeof(int))
+      ITFAILS;
+    if (status.get_source() != 1)
+      ITFAILS;
+
+    lrr.wait(&status);
+    if (status.get_message_size() != sizeof(long))
+      ITFAILS;
+    if (status.get_source() != 1)
+      ITFAILS;
+
+    frr.wait(&status);
+    if (status.get_message_size() != sizeof(float))
+      ITFAILS;
+    if (status.get_source() != 1)
+      ITFAILS;
+
+    drr.wait(&status);
+    if (status.get_message_size() != sizeof(double))
+      ITFAILS;
+    if (status.get_source() != 1)
+      ITFAILS;
 
     // check values
+    if (br != false)
+      ITFAILS;
     if (cr != 'B')
       ITFAILS;
     if (ir != 2)
@@ -206,23 +256,13 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
       ITFAILS;
     if (!soft_equiv(dr, 3.5))
       ITFAILS;
-
-    if (crr.count() != 1)
-      ITFAILS;
-    if (irr.count() != sizeof(int))
-      ITFAILS;
-    if (lrr.count() != sizeof(long))
-      ITFAILS;
-    if (frr.count() != sizeof(float))
-      ITFAILS;
-    if (drr.count() != sizeof(double))
-      ITFAILS;
   }
 
   // receive and send on node 1
   if (rtt_c4::node() == 1) {
     // post receives
     // Test both function that provide equivalent functionality.
+    brr = receive_async(&br, 1, 0);
     receive_async(crr, &cr, 1, 0);
     irr = receive_async(&ir, 1, 0);
     receive_async(lrr, &lr, 1, 0);
@@ -230,6 +270,8 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
     receive_async(drr, &dr, 1, 0);
 
     // check that all are inuse
+    if (!brr.inuse())
+      ITFAILS;
     if (!crr.inuse())
       ITFAILS;
     if (!irr.inuse())
@@ -243,7 +285,9 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
 
     // check on receives
     int done = 0;
-    while (done < 5) {
+    while (done < 6) {
+      if (brr.complete())
+        done++;
       if (crr.complete())
         done++;
       if (irr.complete())
@@ -256,6 +300,8 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
         done++;
     }
 
+    if (br != true)
+      ITFAILS;
     if (cr != 'A')
       ITFAILS;
     if (ir != 1)
@@ -268,6 +314,7 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
       ITFAILS;
 
     // assign new values
+    b = false;
     c = 'B';
     i = 2;
     l = 2000;
@@ -277,6 +324,7 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
     // send them back
     // Test both function that provide equivalent functionality.
 
+    brs = send_async(&b, 1, 0);
     send_async(crs, &c, 1, 0);
     irs = send_async(&i, 1, 0);
     send_async(lrs, &l, 1, 0);
@@ -284,6 +332,7 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
     send_async(drs, &d, 1, 0);
 
     // wait for sends to be finished
+    brs.wait();
     crs.wait();
     irs.wait();
     lrs.wait();
@@ -293,6 +342,8 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
   rtt_c4::global_barrier();
 
   // check that all requests are done
+  if (brs.inuse())
+    ITFAILS;
   if (crs.inuse())
     ITFAILS;
   if (irs.inuse())
@@ -304,6 +355,8 @@ void non_blocking_ping_pong(rtt_dsxx::UnitTest &ut) {
   if (drs.inuse())
     ITFAILS;
 
+  if (brr.inuse())
+    ITFAILS;
   if (crr.inuse())
     ITFAILS;
   if (irr.inuse())
@@ -420,6 +473,7 @@ void send_receive_ping_pong(rtt_dsxx::UnitTest &ut) {
   if (rtt_c4::nodes() != 2)
     return;
 
+  bool b = false, br;
   char c = 0, cr;
   int i = 0, ir;
   long l = 0, lr;
@@ -428,12 +482,14 @@ void send_receive_ping_pong(rtt_dsxx::UnitTest &ut) {
 
   // assign on node 0
   if (rtt_c4::node() == 0) {
+    b = true;
     c = 'A';
     i = 1;
     l = 1000;
     f = 1.5;
     d = 2.5;
 
+    send_receive(&b, 1, 1, &br, 1, 1);
     send_receive(&c, 1, 1, &cr, 1, 1);
     send_receive(&i, 1, 1, &ir, 1, 1);
     send_receive(&l, 1, 1, &lr, 1, 1);
@@ -441,6 +497,8 @@ void send_receive_ping_pong(rtt_dsxx::UnitTest &ut) {
     send_receive(&d, 1, 1, &dr, 1, 1);
 
     // check values
+    if (br != false)
+      ITFAILS;
     if (cr != 'B')
       ITFAILS;
     if (ir != 2)
@@ -456,12 +514,14 @@ void send_receive_ping_pong(rtt_dsxx::UnitTest &ut) {
   // receive and send on node 1
   if (rtt_c4::node() == 1) {
     // assign new values
+    b = false;
     c = 'B';
     i = 2;
     l = 2000;
     f = 2.5;
     d = 3.5;
 
+    send_receive(&b, 1, 0, &br, 1, 0);
     send_receive(&c, 1, 0, &cr, 1, 0);
     send_receive(&i, 1, 0, &ir, 1, 0);
     send_receive(&l, 1, 0, &lr, 1, 0);
@@ -469,6 +529,8 @@ void send_receive_ping_pong(rtt_dsxx::UnitTest &ut) {
     send_receive(&d, 1, 0, &dr, 1, 0);
 
     // check values
+    if (br != true)
+      ITFAILS;
     if (cr != 'A')
       ITFAILS;
     if (ir != 1)
